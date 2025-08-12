@@ -28,40 +28,705 @@ except ImportError:
     # dotenv not available (e.g., on Streamlit Cloud)
     pass
 
-# Import web scraping module with error handling
+# Import web scraping module with enhanced AI functionality
 try:
-    from modules.web_scraping_module import perform_web_scraping
+    from modules.web_scraping_module import perform_web_scraping as basic_web_scraping
     WEB_SCRAPING_AVAILABLE = True
 except ImportError as e:
     WEB_SCRAPING_AVAILABLE = False
     print(f"[INFO] Web scraping module not available: {e}")
     
     # Create a fallback function
-    def perform_web_scraping(*args, **kwargs):
+    def basic_web_scraping(*args, **kwargs):
         st.warning("⚠️ Web scraping features are not available in this deployment")
         st.info("This may be due to missing dependencies or modules.")
         return None
 
-# Import enhanced timber research functionality
-try:
-    from modules.enhanced_timber_business_researcher import EnhancedTimberBusinessResearcher
-    ENHANCED_TIMBER_AVAILABLE = True
-except ImportError as e:
-    ENHANCED_TIMBER_AVAILABLE = False
-    print(f"[INFO] Enhanced timber research not available: {e}")
-
-# Create missing function definitions
-def perform_web_scraping_enhanced_timber(filtered_df):
-    """Enhanced timber business research with smart filtering"""
-    if not ENHANCED_TIMBER_AVAILABLE:
-        st.warning("⚠️ Enhanced timber research features are not available in this deployment")
-        st.info("Falling back to standard web scraping functionality.")
-        return perform_web_scraping(filtered_df)
+# Enhanced web scraping function that uses AI capabilities
+def perform_web_scraping(filtered_df):
+    """Enhanced web scraping with AI business research capabilities"""
+    if not AI_BUSINESS_RESEARCH_AVAILABLE:
+        st.error("❌ AI Business Research functionality is not available")
+        st.info("🔑 This requires OpenAI and Tavily API keys to be configured in Streamlit secrets.")
+        st.info("📚 To enable full AI search functionality, please add your API keys in Streamlit secrets.")
+        
+        # Fall back to basic web scraping if available
+        if WEB_SCRAPING_AVAILABLE:
+            st.info("🔄 Falling back to basic web scraping (without AI enhancement)...")
+            return basic_web_scraping(filtered_df)
+        else:
+            return None
     
-    # Enhanced timber research implementation would go here
-    st.info("🌲 Enhanced Timber Research functionality will be implemented here")
-    # For now, fall back to standard research
-    return perform_web_scraping(filtered_df)
+    return perform_standard_ai_research_interface(filtered_df)
+
+def perform_standard_ai_research_interface(filtered_df):
+    """Standard AI-powered business research interface"""
+    # Check if DataFrame is empty
+    if len(filtered_df) == 0:
+        st.error("❌ No data to research. Please adjust your filters.")
+        return
+
+    # Find suitable columns for business names
+    potential_name_columns = []
+    for col in filtered_df.columns:
+        col_lower = col.lower()
+        if any(keyword in col_lower for keyword in ['consignee', 'name', 'company', 'business', 'shipper', 'supplier']):
+            potential_name_columns.append(col)
+
+    if not potential_name_columns:
+        st.error("❌ No suitable business name columns found. Need columns like 'Consignee Name', 'Company Name', etc.")
+        return
+
+    st.subheader("🔍 AI-Powered Business Research")
+    st.info("🤖 This uses advanced AI (OpenAI + Tavily) to research business contact information from web sources.")
+    
+    # Business name column selection
+    st.write("🏷️ **Select Business Name Column:**")
+    selected_column = st.selectbox(
+        "Choose the column containing business names:",
+        potential_name_columns,
+        help="Select the column that contains the business names you want to research",
+        key="ai_business_research_column"
+    )
+
+    # Check unique business count
+    unique_businesses = filtered_df[selected_column].dropna().nunique()
+    if unique_businesses == 0:
+        st.error(f"❌ No business names found in column '{selected_column}'")
+        return
+
+    st.success(f"📊 Found {unique_businesses} unique businesses to research in '{selected_column}'")
+
+    # Research limit selection
+    st.write("🎯 **AI Research Range:**")
+    col_from, col_to = st.columns(2)
+    
+    with col_from:
+        range_from = st.number_input(
+            "From:",
+            min_value=1,
+            max_value=min(20, unique_businesses),
+            value=1,
+            help="Starting business number",
+            key="ai_research_range_from"
+        )
+    
+    with col_to:
+        range_to = st.number_input(
+            "To:",
+            min_value=range_from,
+            max_value=min(20, unique_businesses),
+            value=min(5, unique_businesses),
+            help="Ending business number",
+            key="ai_research_range_to"
+        )
+    
+    max_businesses = range_to - range_from + 1
+    
+    # Cost estimation
+    standard_cost = max_businesses * 0.03
+    st.warning(f"💰 **Estimated API Cost:** ~${standard_cost:.2f} (Standard AI research)")
+
+    # API Configuration check
+    st.write("🔧 **AI Search API Configuration:**")
+    
+    # Check API keys from Streamlit secrets
+    openai_key = st.secrets.get('OPENAI_API_KEY', '') if hasattr(st, 'secrets') else ''
+    tavily_key = st.secrets.get('TAVILY_API_KEY', '') if hasattr(st, 'secrets') else ''
+    groq_key = st.secrets.get('GROQ_API_KEY', '') if hasattr(st, 'secrets') else ''
+    
+    def is_valid_key(key, key_type):
+        if not key or key.strip() == '':
+            return False, "Key is empty or missing"
+        if key_type == 'openai' and not key.startswith('sk-'):
+            return False, "OpenAI key should start with 'sk-'"
+        if key_type == 'tavily' and not key.startswith('tvly-'):
+            return False, "Tavily key should start with 'tvly-'"
+        if key_type == 'groq' and not key.startswith('gsk_'):
+            return False, "Groq key should start with 'gsk_'"
+        return True, "Key format is valid"
+    
+    openai_valid, openai_reason = is_valid_key(openai_key, 'openai')
+    tavily_valid, tavily_reason = is_valid_key(tavily_key, 'tavily')
+    groq_valid, groq_reason = is_valid_key(groq_key, 'groq')
+    
+    # Display API status
+    col_api1, col_api2, col_api3 = st.columns(3)
+    
+    with col_api1:
+        if openai_valid:
+            st.success("✅ OpenAI API: Ready")
+        else:
+            st.error(f"❌ OpenAI API: {openai_reason}")
+    
+    with col_api2:
+        if tavily_valid:
+            st.success("✅ Tavily Search API: Ready")
+        else:
+            st.error(f"❌ Tavily API: {tavily_reason}")
+    
+    with col_api3:
+        if groq_valid:
+            st.success("✅ Groq API: Ready")
+        else:
+            st.warning(f"⚠️ Groq API: {groq_reason} (Optional)")
+    
+    all_apis_ready = openai_valid and tavily_valid
+    
+    if not all_apis_ready:
+        st.error("❌ **Cannot start AI research: Missing required API keys**")
+        st.info("🔑 Please configure OpenAI and Tavily API keys in Streamlit secrets to enable AI search functionality.")
+        
+        with st.expander("📝 Setup Instructions", expanded=False):
+            st.markdown("""
+            **To enable AI Search functionality:**
+            
+            1. **Go to your Streamlit Cloud app settings**
+            2. **Navigate to Secrets section**
+            3. **Add your API keys:**
+               ```toml
+               OPENAI_API_KEY = "sk-your_actual_openai_key_here"
+               TAVILY_API_KEY = "tvly-your_actual_tavily_key_here"
+               GROQ_API_KEY = "gsk_your_groq_key_here"
+               ```
+            4. **Restart the app**
+            5. **Get API keys from:**
+               - [OpenAI API Keys](https://platform.openai.com/api-keys)
+               - [Tavily API](https://tavily.com)
+               - [Groq API](https://console.groq.com/)
+            """)
+        return
+    
+    # Test API connectivity
+    if st.button("🧪 Test AI Search APIs", help="Test if all AI search APIs are working correctly", key="test_standard_ai_apis"):
+        with st.spinner("Testing AI search connectivity..."):
+            try:
+                researcher = StreamlitBusinessResearcher()
+                api_ok, api_message = researcher.test_apis()
+                
+                if api_ok:
+                    st.success(f"✅ AI Search APIs Test Successful: {api_message}")
+                else:
+                    st.error(f"❌ AI Search APIs Test Failed: {api_message}")
+            except Exception as e:
+                st.error(f"❌ API Test Error: {str(e)}")
+    
+    # Standard Research Start Button
+    st.markdown("---")
+    
+    if st.button(
+        f"🚀 Start AI Business Research ({max_businesses} businesses)",
+        type="primary",
+        disabled=not all_apis_ready,
+        help=f"Start AI-powered research of {max_businesses} businesses"
+    ):
+        
+        if not all_apis_ready:
+            st.error("❌ Cannot start research: API keys not properly configured")
+            return
+        
+        st.success("🔄 Starting AI Business Research...")
+        
+        try:
+            # Create progress indicators
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            status_text.info("🚀 Initializing AI research system...")
+            progress_bar.progress(10)
+            
+            with st.spinner("🤖 Researching businesses using AI web search..."):
+                
+                # Properly slice the DataFrame for the specified range
+                unique_businesses_list = filtered_df[selected_column].dropna().unique()
+                start_idx = range_from - 1
+                end_idx = range_to
+                businesses_to_research = unique_businesses_list[start_idx:end_idx]
+                research_df = filtered_df[filtered_df[selected_column].isin(businesses_to_research)]
+                
+                st.info(f"🎯 **AI Research Target ({range_from} to {range_to}):**")
+                for i, business in enumerate(businesses_to_research, start=range_from):
+                    st.write(f"   {i}. {business}")
+                
+                # Run standard AI research
+                async def run_standard_research():
+                    return await research_businesses_from_dataframe(
+                        df=research_df,
+                        consignee_column=selected_column,
+                        max_businesses=len(businesses_to_research),
+                        enable_justdial=True
+                    )
+                
+                status_text.info("🔍 Starting AI business research...")
+                progress_bar.progress(30)
+                
+                # Execute the async research
+                try:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    
+                    status_text.info("🌐 Connecting to AI search engines...")
+                    progress_bar.progress(50)
+                    
+                    results_df, summary, csv_filename = loop.run_until_complete(run_standard_research())
+                    loop.close()
+                    
+                    progress_bar.progress(90)
+                    status_text.success("✅ AI research completed successfully!")
+                    
+                except Exception as e:
+                    st.error(f"❌ AI Research Error: {str(e)}")
+                    return
+                
+                progress_bar.progress(100)
+                status_text.success("✅ AI business research completed!")
+                
+                # Display results
+                if results_df is not None and not results_df.empty:
+                    st.success("🎉 **AI Research Results:**")
+                    
+                    # Summary metrics
+                    col_sum1, col_sum2, col_sum3, col_sum4 = st.columns(4)
+                    
+                    with col_sum1:
+                        st.metric("Total Processed", summary['total_processed'])
+                    with col_sum2:
+                        st.metric("✅ Successful", summary['successful'])
+                    with col_sum3:
+                        st.metric("⚠️ Manual Required", summary['manual_required'])
+                    with col_sum4:
+                        st.metric("📊 Success Rate", f"{summary['success_rate']:.1f}%")
+                    
+                    # Display results table
+                    st.subheader("📈 AI Research Results")
+                    st.dataframe(results_df, use_container_width=True, height=400)
+                    
+                    # Download results
+                    st.subheader("📥 Download AI Research Results")
+                    
+                    csv_data = results_df.to_csv(index=False)
+                    
+                    col_down1, col_down2 = st.columns(2)
+                    with col_down1:
+                        st.download_button(
+                            label="📄 Download AI Results CSV",
+                            data=csv_data,
+                            file_name=f"ai_business_research_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                            mime="text/csv"
+                        )
+                    
+                    with col_down2:
+                        # Create enhanced dataset
+                        if 'business_name' in results_df.columns:
+                            try:
+                                results_df_unique = results_df.drop_duplicates(subset=['business_name'], keep='first')
+                                research_mapping = results_df_unique.set_index('business_name')[['phone', 'email', 'website', 'address']].to_dict('index')
+                                
+                                enhanced_df = filtered_df.copy()
+                                enhanced_df['ai_research_phone'] = enhanced_df[selected_column].map(lambda x: research_mapping.get(x, {}).get('phone', ''))
+                                enhanced_df['ai_research_email'] = enhanced_df[selected_column].map(lambda x: research_mapping.get(x, {}).get('email', ''))
+                                enhanced_df['ai_research_website'] = enhanced_df[selected_column].map(lambda x: research_mapping.get(x, {}).get('website', ''))
+                                enhanced_df['ai_research_address'] = enhanced_df[selected_column].map(lambda x: research_mapping.get(x, {}).get('address', ''))
+                                
+                                enhanced_csv = enhanced_df.to_csv(index=False)
+                                
+                                st.download_button(
+                                    label="🔗 Download Enhanced Dataset",
+                                    data=enhanced_csv,
+                                    file_name=f"enhanced_dataset_ai_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                    mime="text/csv",
+                                    help="Original data + AI research results combined"
+                                )
+                                
+                            except Exception as e:
+                                st.warning(f"Could not create enhanced dataset: {e}")
+                    
+                    # Success message
+                    st.balloons()
+                    st.success(f"🎉 Successfully completed AI research for {summary['successful']} businesses!")
+                    
+                    if summary['manual_required'] > 0:
+                        st.info(f"🔍 {summary['manual_required']} businesses require manual research")
+                
+                else:
+                    st.warning("⚠️ AI research completed but no results were found.")
+                    st.info("This might be due to API rate limits or no search results found.")
+        
+        except Exception as e:
+            st.error(f"❌ Final AI research error: {str(e)}")
+
+# Import business research with comprehensive AI search functionality
+try:
+    from modules.streamlit_business_researcher import (
+        StreamlitBusinessResearcher, 
+        research_businesses_from_dataframe,
+        research_timber_businesses_from_dataframe
+    )
+    AI_BUSINESS_RESEARCH_AVAILABLE = True
+    print("[INFO] ✅ AI Business Research (OpenAI + Tavily) loaded successfully")
+except ImportError as e:
+    AI_BUSINESS_RESEARCH_AVAILABLE = False
+    print(f"[INFO] ⚠️ AI Business Research not available: {e}")
+    
+    # Create fallback functions that inform users about missing functionality
+    class StreamlitBusinessResearcher:
+        def test_apis(self):
+            return False, "AI Business Research not available - missing dependencies"
+    
+    async def research_businesses_from_dataframe(*args, **kwargs):
+        return None, {"error": "AI Business Research not available"}, None
+        
+    async def research_timber_businesses_from_dataframe(*args, **kwargs):
+        return None, {"error": "Enhanced Timber Research not available"}, None
+
+# Create enhanced web scraping functions with full AI functionality
+def perform_web_scraping_enhanced_timber(filtered_df):
+    """Enhanced timber business research with smart filtering using AI"""
+    if not AI_BUSINESS_RESEARCH_AVAILABLE:
+        st.error("❌ AI Business Research functionality is not available")
+        st.info("🔑 This requires OpenAI and Tavily API keys to be configured in Streamlit secrets.")
+        st.info("📚 Please add your API keys to enable full AI search functionality.")
+        return
+    
+    return perform_enhanced_timber_research_interface(filtered_df)
+
+def perform_enhanced_timber_research_interface(filtered_df):
+    """Full-featured enhanced timber business research interface"""
+    # This will use the research_timber_businesses_from_dataframe function
+    # with comprehensive AI search capabilities
+    
+    # Check if DataFrame is empty
+    if len(filtered_df) == 0:
+        st.error("❌ No data to research. Please adjust your filters.")
+        return
+
+    # Find suitable columns for business names
+    potential_name_columns = []
+    for col in filtered_df.columns:
+        col_lower = col.lower()
+        if any(keyword in col_lower for keyword in ['consignee', 'name', 'company', 'business', 'shipper', 'supplier']):
+            potential_name_columns.append(col)
+
+    if not potential_name_columns:
+        st.error("❌ No suitable business name columns found. Need columns like 'Consignee Name', 'Company Name', etc.")
+        return
+
+    st.subheader("🌲 Enhanced Timber Business Research")
+    st.info("🌲 This uses advanced AI to specifically target timber and wood-related businesses with smart filtering.")
+    
+    # Business name column selection
+    st.write("🏷️ **Select Business Name Column:**")
+    selected_column = st.selectbox(
+        "Choose the column containing business names:",
+        potential_name_columns,
+        help="Select the column that contains the business names you want to research",
+        key="enhanced_timber_business_column"
+    )
+
+    # City and address column detection (for enhanced timber research)
+    potential_city_columns = []
+    potential_address_columns = []
+    
+    for col in filtered_df.columns:
+        col_lower = col.lower()
+        if any(keyword in col_lower for keyword in ['city', 'location', 'place']):
+            potential_city_columns.append(col)
+        if any(keyword in col_lower for keyword in ['address', 'location', 'street']):
+            potential_address_columns.append(col)
+    
+    col_city, col_address = st.columns(2)
+    
+    with col_city:
+        city_column = st.selectbox(
+            "🏢 City Column (Optional):",
+            ['None'] + potential_city_columns,
+            help="Helps with location-based filtering",
+            key="enhanced_timber_city_column"
+        )
+    
+    with col_address:
+        address_column = st.selectbox(
+            "📍 Address Column (Optional):",
+            ['None'] + potential_address_columns,
+            help="Helps with location verification",
+            key="enhanced_timber_address_column"
+        )
+
+    # Check unique business count
+    unique_businesses = filtered_df[selected_column].dropna().nunique()
+    if unique_businesses == 0:
+        st.error(f"❌ No business names found in column '{selected_column}'")
+        return
+
+    st.success(f"📊 Found {unique_businesses} unique businesses to research in '{selected_column}'")
+
+    # Research limit selection
+    st.write("🎯 **Enhanced Research Range:**")
+    col_from, col_to = st.columns(2)
+    
+    with col_from:
+        range_from = st.number_input(
+            "From:",
+            min_value=1,
+            max_value=min(15, unique_businesses),
+            value=1,
+            help="Starting business number",
+            key="enhanced_timber_range_from"
+        )
+    
+    with col_to:
+        range_to = st.number_input(
+            "To:",
+            min_value=range_from,
+            max_value=min(15, unique_businesses),
+            value=min(5, unique_businesses),
+            help="Ending business number",
+            key="enhanced_timber_range_to"
+        )
+    
+    max_businesses = range_to - range_from + 1
+    
+    # Enhanced features info
+    st.info(f"🌲 Will research {max_businesses} businesses with enhanced timber-specific AI filtering")
+    
+    # Cost estimation
+    enhanced_cost = max_businesses * 0.05  # Enhanced research costs more
+    st.warning(f"💰 **Estimated API Cost:** ~${enhanced_cost:.2f} (Enhanced AI research)")
+
+    # API Configuration check
+    st.write("🔧 **AI Search API Configuration:**")
+    
+    # Check API keys from Streamlit secrets
+    openai_key = st.secrets.get('OPENAI_API_KEY', '') if hasattr(st, 'secrets') else ''
+    tavily_key = st.secrets.get('TAVILY_API_KEY', '') if hasattr(st, 'secrets') else ''
+    groq_key = st.secrets.get('GROQ_API_KEY', '') if hasattr(st, 'secrets') else ''
+    
+    def is_valid_key(key, key_type):
+        if not key or key.strip() == '':
+            return False, "Key is empty or missing"
+        if key_type == 'openai' and not key.startswith('sk-'):
+            return False, "OpenAI key should start with 'sk-'"
+        if key_type == 'tavily' and not key.startswith('tvly-'):
+            return False, "Tavily key should start with 'tvly-'"
+        if key_type == 'groq' and not key.startswith('gsk_'):
+            return False, "Groq key should start with 'gsk_'"
+        return True, "Key format is valid"
+    
+    openai_valid, openai_reason = is_valid_key(openai_key, 'openai')
+    tavily_valid, tavily_reason = is_valid_key(tavily_key, 'tavily')
+    groq_valid, groq_reason = is_valid_key(groq_key, 'groq')
+    
+    # Display API status
+    col_api1, col_api2, col_api3 = st.columns(3)
+    
+    with col_api1:
+        if openai_valid:
+            st.success("✅ OpenAI API: Ready")
+        else:
+            st.error(f"❌ OpenAI API: {openai_reason}")
+    
+    with col_api2:
+        if tavily_valid:
+            st.success("✅ Tavily Search API: Ready")
+        else:
+            st.error(f"❌ Tavily API: {tavily_reason}")
+    
+    with col_api3:
+        if groq_valid:
+            st.success("✅ Groq API: Ready")
+        else:
+            st.warning(f"⚠️ Groq API: {groq_reason} (Optional)")
+    
+    all_apis_ready = openai_valid and tavily_valid
+    
+    if not all_apis_ready:
+        st.error("❌ **Cannot start enhanced research: Missing required API keys**")
+        st.info("🔑 Please configure OpenAI and Tavily API keys in Streamlit secrets to enable AI search functionality.")
+        
+        with st.expander("📝 Setup Instructions", expanded=False):
+            st.markdown("""
+            **To enable AI Search functionality:**
+            
+            1. **Go to your Streamlit Cloud app settings**
+            2. **Navigate to Secrets section**
+            3. **Add your API keys:**
+               ```toml
+               OPENAI_API_KEY = "sk-your_actual_openai_key_here"
+               TAVILY_API_KEY = "tvly-your_actual_tavily_key_here"
+               GROQ_API_KEY = "gsk_your_groq_key_here"
+               ```
+            4. **Restart the app**
+            5. **Get API keys from:**
+               - [OpenAI API Keys](https://platform.openai.com/api-keys)
+               - [Tavily API](https://tavily.com)
+               - [Groq API](https://console.groq.com/)
+            """)
+        return
+    
+    # Test API connectivity
+    if st.button("🧪 Test AI Search APIs", help="Test if all AI search APIs are working correctly"):
+        with st.spinner("Testing AI search connectivity..."):
+            try:
+                researcher = StreamlitBusinessResearcher()
+                api_ok, api_message = researcher.test_apis()
+                
+                if api_ok:
+                    st.success(f"✅ AI Search APIs Test Successful: {api_message}")
+                else:
+                    st.error(f"❌ AI Search APIs Test Failed: {api_message}")
+            except Exception as e:
+                st.error(f"❌ API Test Error: {str(e)}")
+    
+    # Enhanced Research Start Button
+    st.markdown("---")
+    
+    if st.button(
+        f"🌲 Start Enhanced Timber Research ({max_businesses} businesses)",
+        type="primary",
+        disabled=not all_apis_ready,
+        help=f"Start AI-powered research of {max_businesses} timber businesses"
+    ):
+        
+        if not all_apis_ready:
+            st.error("❌ Cannot start research: API keys not properly configured")
+            return
+        
+        st.success("🔄 Starting Enhanced Timber Business Research with AI...")
+        
+        try:
+            # Create progress indicators
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            status_text.info("🚀 Initializing enhanced AI research system...")
+            progress_bar.progress(10)
+            
+            with st.spinner("🌲 Researching timber businesses using advanced AI filtering..."):
+                
+                # Properly slice the DataFrame for the specified range
+                unique_businesses_list = filtered_df[selected_column].dropna().unique()
+                start_idx = range_from - 1
+                end_idx = range_to
+                businesses_to_research = unique_businesses_list[start_idx:end_idx]
+                research_df = filtered_df[filtered_df[selected_column].isin(businesses_to_research)]
+                
+                st.info(f"🎯 **Enhanced AI Research Target ({range_from} to {range_to}):**")
+                for i, business in enumerate(businesses_to_research, start=range_from):
+                    st.write(f"   {i}. {business}")
+                
+                # Run enhanced timber research
+                async def run_enhanced_research():
+                    return await research_timber_businesses_from_dataframe(
+                        df=research_df,
+                        consignee_column=selected_column,
+                        city_column=city_column if city_column != 'None' else None,
+                        address_column=address_column if address_column != 'None' else None,
+                        max_businesses=len(businesses_to_research),
+                        enable_justdial=True
+                    )
+                
+                status_text.info("🔍 Starting enhanced timber business AI analysis...")
+                progress_bar.progress(30)
+                
+                # Execute the async research
+                try:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    
+                    status_text.info("🌐 Connecting to AI search engines...")
+                    progress_bar.progress(50)
+                    
+                    results_df, summary, csv_filename = loop.run_until_complete(run_enhanced_research())
+                    loop.close()
+                    
+                    progress_bar.progress(90)
+                    status_text.success("✅ Enhanced research completed successfully!")
+                    
+                except Exception as e:
+                    st.error(f"❌ Enhanced Research Error: {str(e)}")
+                    return
+                
+                progress_bar.progress(100)
+                status_text.success("✅ Enhanced timber research completed!")
+                
+                # Display enhanced results
+                if results_df is not None and not results_df.empty:
+                    st.success("🎉 **Enhanced Timber Research Results:**")
+                    
+                    # Enhanced summary metrics
+                    col_sum1, col_sum2, col_sum3, col_sum4, col_sum5 = st.columns(5)
+                    
+                    with col_sum1:
+                        st.metric("Total Processed", summary['total_processed'])
+                    with col_sum2:
+                        st.metric("✅ Timber Businesses", summary['successful'])
+                    with col_sum3:
+                        st.metric("⚠️ Manual Required", summary['manual_required'])
+                    with col_sum4:
+                        st.metric("🚫 Irrelevant Filtered", summary.get('irrelevant_filtered', 0))
+                    with col_sum5:
+                        st.metric("🌲 Relevance Rate", f"{summary.get('relevance_rate', 0):.1f}%")
+                    
+                    # Display enhanced results table
+                    st.subheader("📈 Enhanced Research Results")
+                    st.dataframe(results_df, use_container_width=True, height=400)
+                    
+                    # Download enhanced results
+                    st.subheader("📥 Download Enhanced Results")
+                    
+                    csv_data = results_df.to_csv(index=False)
+                    
+                    col_down1, col_down2 = st.columns(2)
+                    with col_down1:
+                        st.download_button(
+                            label="📄 Download Enhanced Results CSV",
+                            data=csv_data,
+                            file_name=f"enhanced_timber_research_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                            mime="text/csv"
+                        )
+                    
+                    with col_down2:
+                        # Create enhanced dataset
+                        if 'business_name' in results_df.columns:
+                            try:
+                                results_df_unique = results_df.drop_duplicates(subset=['business_name'], keep='first')
+                                research_mapping = results_df_unique.set_index('business_name')[['phone', 'email', 'website', 'address']].to_dict('index')
+                                
+                                enhanced_df = filtered_df.copy()
+                                enhanced_df['ai_research_phone'] = enhanced_df[selected_column].map(lambda x: research_mapping.get(x, {}).get('phone', ''))
+                                enhanced_df['ai_research_email'] = enhanced_df[selected_column].map(lambda x: research_mapping.get(x, {}).get('email', ''))
+                                enhanced_df['ai_research_website'] = enhanced_df[selected_column].map(lambda x: research_mapping.get(x, {}).get('website', ''))
+                                enhanced_df['ai_research_address'] = enhanced_df[selected_column].map(lambda x: research_mapping.get(x, {}).get('address', ''))
+                                
+                                enhanced_csv = enhanced_df.to_csv(index=False)
+                                
+                                st.download_button(
+                                    label="🔗 Download Enhanced Dataset",
+                                    data=enhanced_csv,
+                                    file_name=f"enhanced_dataset_ai_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                    mime="text/csv",
+                                    help="Original data + AI research results combined"
+                                )
+                                
+                            except Exception as e:
+                                st.warning(f"Could not create enhanced dataset: {e}")
+                    
+                    # Success message
+                    st.balloons()
+                    st.success(f"🎉 Successfully completed enhanced AI research for {summary['successful']} timber businesses!")
+                    
+                    if summary['manual_required'] > 0:
+                        st.info(f"🔍 {summary['manual_required']} businesses require manual research")
+                    
+                    if summary.get('irrelevant_filtered', 0) > 0:
+                        st.info(f"🗂️ {summary['irrelevant_filtered']} non-timber businesses were filtered out by AI")
+                
+                else:
+                    st.warning("⚠️ Enhanced research completed but no results were found.")
+                    st.info("This might be due to API rate limits or no relevant timber businesses found.")
+        
+        except Exception as e:
+            st.error(f"❌ Final enhanced research error: {str(e)}")
 
 # Import simplified data explorer with error handling
 try:
