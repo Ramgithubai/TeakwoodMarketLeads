@@ -13,4 +13,8 @@ __all__ = [
     'enhanced_government_researcher'
 ]
 
-from .enhanced_timber_business_researcher import EnhancedTimberBusinessResearcher, research_timber_businesses_from_dataframe
+try:
+    from .enhanced_timber_business_researcher import EnhancedTimberBusinessResearcher, research_timber_businesses_from_dataframe
+except ImportError:
+    # Module may not be available in all deployments
+    pass

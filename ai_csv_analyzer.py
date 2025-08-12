@@ -42,19 +42,46 @@ except ImportError as e:
         st.info("This may be due to missing dependencies or modules.")
         return None
 
+# Import enhanced timber research functionality
+try:
+    from modules.enhanced_timber_business_researcher import EnhancedTimberBusinessResearcher
+    ENHANCED_TIMBER_AVAILABLE = True
+except ImportError as e:
+    ENHANCED_TIMBER_AVAILABLE = False
+    print(f"[INFO] Enhanced timber research not available: {e}")
+
+# Create missing function definitions
+def perform_web_scraping_enhanced_timber(filtered_df):
+    """Enhanced timber business research with smart filtering"""
+    if not ENHANCED_TIMBER_AVAILABLE:
+        st.warning("⚠️ Enhanced timber research features are not available in this deployment")
+        st.info("Falling back to standard web scraping functionality.")
+        return perform_web_scraping(filtered_df)
+    
+    # Enhanced timber research implementation would go here
+    st.info("🌲 Enhanced Timber Research functionality will be implemented here")
+    # For now, fall back to standard research
+    return perform_web_scraping(filtered_df)
+
 # Import simplified data explorer with error handling
 try:
-    from data_explorer import create_data_explorer
+    from data_explorer import create_data_explorer as external_data_explorer
     DATA_EXPLORER_AVAILABLE = True
 except ImportError as e:
     DATA_EXPLORER_AVAILABLE = False
     print(f"[INFO] Data explorer module not available: {e}")
+    external_data_explorer = None
+
+def create_data_explorer(df, identifier_cols):
+    """Create data explorer - use external if available, otherwise use built-in"""
+    if DATA_EXPLORER_AVAILABLE and external_data_explorer:
+        try:
+            return external_data_explorer(df, identifier_cols)
+        except Exception as e:
+            print(f"[WARNING] External data explorer failed: {e}")
     
-    # Create a fallback function
-    def create_data_explorer(*args, **kwargs):
-        st.warning("⚠️ Enhanced data explorer is not available")
-        st.info("Using basic data display instead.")
-        return None
+    # Use the built-in enhanced data explorer
+    return create_enhanced_data_explorer(df, identifier_cols)
 
 warnings.filterwarnings('ignore')
 
